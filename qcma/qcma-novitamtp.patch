@@ -1,0 +1,171 @@
+--- a/cli/headlessmanager.cpp
++++ b/cli/headlessmanager.cpp
+@@ -28,7 +28,6 @@
+ #include <QTextStream>
+ #include <sys/socket.h>
+ #include <unistd.h>
+-#include <vitamtp.h>
+ 
+ int HeadlessManager::sighup_fd[2];
+ int HeadlessManager::sigterm_fd[2];
+@@ -50,8 +49,8 @@
+ 
+ HeadlessManager::~HeadlessManager()
+ {
+-    VitaMTP_Cleanup();
+-    VitaMTP_USB_Exit();
++    //VitaMTP_Cleanup();
++    //VtaMTP_USB_Exit();
+     delete m_db;
+ }
+ 
+@@ -70,12 +69,12 @@
+ 
+ void HeadlessManager::start()
+ {
+-    VitaMTP_Init();
++    //VitaMTP_Init();
+ 
+-    if(VitaMTP_USB_Init() < 0) {
++    /*if(VitaMTP_USB_Init() < 0) {
+         emit messageSent(tr("Cannot initialize VitaMTP USB library"));
+         return;
+-    }
++    }*/
+ 
+     if(QSettings().value("useMemoryStorage", true).toBool()) {
+         m_db = new QListDB();
+@@ -94,24 +93,7 @@
+     CmaClient *client;
+     QSettings settings;
+ 
+-    if(!settings.value("disableUSB", false).toBool()) {
+-        usb_thread = new QThread();
+-        client = new CmaClient(m_db);
+-        usb_thread->setObjectName("usb_thread");
+-        connect(usb_thread, SIGNAL(started()), client, SLOT(connectUsb()));
+-        connect(client, SIGNAL(finished()), usb_thread, SLOT(quit()), Qt::DirectConnection);
+-        connect(usb_thread, SIGNAL(finished()), usb_thread, SLOT(deleteLater()));
+-        connect(usb_thread, SIGNAL(finished()), this, SLOT(threadStopped()));
+-        connect(usb_thread, SIGNAL(finished()), client, SLOT(deleteLater()));
+-
+-        connect(client, SIGNAL(refreshDatabase()), this, SLOT(refreshDatabase()));
+-
+-        client->moveToThread(usb_thread);
+-        usb_thread->start();
+-        thread_count++;
+-    }
+-
+-    if(!settings.value("disableWireless", false).toBool()) {
++	QTextStream(stdout) << "Wifi activa" << endl;
+         CmaBroadcast *broadcast = new CmaBroadcast(this);
+         wireless_thread = new QThread();
+         client = new CmaClient(m_db, broadcast);
+@@ -127,7 +109,6 @@
+         client->moveToThread(wireless_thread);
+         wireless_thread->start();
+         thread_count++;
+-    }
+ 
+     if(thread_count == 0) {
+         qCritical("You must enable at least USB or Wireless monitoring");
+
+--- a/cli/main_cli.cpp
++++ b/cli/main_cli.cpp
+@@ -30,7 +30,6 @@
+ #include <QTranslator>
+ 
+ #include <inttypes.h>
+-#include <vitamtp.h>
+ 
+ #include "singlecoreapplication.h"
+ #include "headlessmanager.h"
+@@ -119,18 +118,12 @@
+     if(!setup_handlers())
+         return 1;
+ 
+-    if(app.arguments().contains("--with-debug")) {
+-        VitaMTP_Set_Logging(VitaMTP_DEBUG);
+-    } else if(app.arguments().contains("--verbose")) {
+-        VitaMTP_Set_Logging(VitaMTP_VERBOSE);
+-    } else {
+-        VitaMTP_Set_Logging(VitaMTP_NONE);
+ #if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
+         qInstallMessageHandler(noDebugOutput);
+ #else
+         qInstallMsgHandler(noDebugOutput);
+ #endif
+-    }
++
+ 
+ #if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
+     QTextCodec::setCodecForCStrings(QTextCodec::codecForName("UTF-8"));
+--- a/common/cmaclient.cpp
++++ b/common/cmaclient.cpp
+@@ -57,35 +57,6 @@
+     this_object = this;
+ }
+ 
+-void CmaClient::connectUsb()
+-{
+-    vita_device_t *vita;
+-
+-    qDebug("Starting usb_thread: 0x%016" PRIxPTR, (uintptr_t)QThread::currentThreadId());
+-
+-    setActive(true);
+-    usbwait.lock();
+-
+-    do {
+-        if((vita = VitaMTP_Get_First_USB_Vita()) != NULL) {
+-            qDebug("Starting new USB connection");
+-            processNewConnection(vita);
+-        } else {
+-            //TODO: replace this with an event-driven setup
+-            usbcondition.wait(&usbwait, 2000);
+-            mutex.lock();
+-            if(in_progress) {
+-                sema.acquire();
+-            }
+-            mutex.unlock();
+-        }
+-    } while(isActive());
+-
+-    usbwait.unlock();
+-    qDebug("Finishing usb_thread");
+-    emit finished();
+-}
+-
+ void CmaClient::connectWireless()
+ {
+     vita_device_t *vita;
+@@ -203,10 +174,7 @@
+     }
+ 
+     QTextStream out(stdout);
+-    out << "Your registration PIN for " << info->name << " is: ";
+-    out.setFieldWidth(8);
+-    out.setPadChar('0');
+-    out << pin << endl;
++    out << "Your registration PIN for " << info->name << " is: " << pin << endl;
+ 
+     qDebug("PIN: %08i", pin);
+ 
+--- a/common/cmaclient.h
++++ b/common/cmaclient.h
+@@ -29,7 +29,6 @@
+ #include <QString>
+ #include <QWaitCondition>
+ 
+-#include <vitamtp.h>
+ 
+ class CmaClient : public QObject
+ {
+@@ -84,7 +83,6 @@
+     static int stop();
+ 
+ private slots:
+-    void connectUsb();
+     void connectWireless();
+ };
+
+ 
